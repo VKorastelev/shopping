@@ -62,8 +62,6 @@ int main(void)
     int ret = 0;
     void *res = NULL;
 
-    //pthread_t tid[NUM_THREADS];
-
     rand_init();
 
     for (i = 0; i < NUM_SHOPS; i++)
@@ -175,26 +173,26 @@ static void *thf_supplier(void *args)
 
     while (1)
     {
-        for (i = 0; i < NUM_SHOPS; i++)
+        i = rand_in_range(0, NUM_SHOPS - 1);
+        
+        if (0 == pthread_mutex_trylock(&shops[i].mutex_shop_state))
         {
-            if (0 == pthread_mutex_trylock(&shops[i].mutex_shop_state))
-            {
-                shops[i].num_of_product += 200;
+            shops[i].num_of_product += 200;
+
+            printf("\n\033[4m***Supplier N %d added 200 items to the shop N %d, num"
+                    " of product items = %d\n\033[0m",
+                    sinfo->supplier_num,
+                    shops[i].shop_num,
+                    shops[i].num_of_product);
                 
-                printf("Supplier N %d added 200 items to the shop N %d, num of product"
-                        " items = %d\n",
-                        sinfo->supplier_num,
-                        shops[i].shop_num,
-                        shops[i].num_of_product);
+            pthread_mutex_unlock(&shops[i].mutex_shop_state);
                 
-                pthread_mutex_unlock(&shops[i].mutex_shop_state);
-                
-                sleep(1);
-            }
+            sleep(1);
         }
         pthread_testcancel();
     }
-    pthread_exit(0);
+
+    return NULL;
 }
 
 
@@ -204,51 +202,45 @@ static void *thf_buyer(void *args)
     struct buyer_info *binfo = args;
     bool purch_ok = false;
 
-//    while(binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
     while(1)
     {
-        for (i = 0; i < NUM_SHOPS; i++)
+        i = rand_in_range(0, NUM_SHOPS - 1);
+        
+        if (0 == pthread_mutex_trylock(&shops[i].mutex_shop_state))
         {
-            if (0 == pthread_mutex_trylock(&shops[i].mutex_shop_state))
+            if (shops[i].num_of_product > 0)
             {
-                if (shops[i].num_of_product > 0)
+                binfo->num_purchased_product += shops[i].num_of_product;
+                purch_ok = true;
+
+                printf("Buyer N %d purchased %d items in the shop N %d, num of"
+                        " purchased product = %d\n",
+                        binfo->buyer_num, 
+                        shops[i].num_of_product,
+                        shops[i].shop_num,
+                        binfo->num_purchased_product);
+                shops[i].num_of_product = 0;
+            }
+            else
+            {
+                purch_ok = false;
+            }
+
+            pthread_mutex_unlock(&shops[i].mutex_shop_state);
+
+            if (true == purch_ok)
+            {
+                if (binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
                 {
-                    binfo->num_purchased_product += shops[i].num_of_product;
-                    purch_ok = true;
-
-                    printf("Buyer N %d purchased %d items in the shop N %d, num of"
-                            " purchased product = %d\n",
-                            binfo->buyer_num, 
-                            shops[i].num_of_product,
-                            shops[i].shop_num,
-                            binfo->num_purchased_product);
-                    shops[i].num_of_product = 0;
-
-                    //pthread_mutex_unlock(&shops[i].mutex_shop_state);
+                    sleep(2);
                 }
                 else
                 {
-                    purch_ok = false;
-                }
-
-                pthread_mutex_unlock(&shops[i].mutex_shop_state);
-
-                if (true == purch_ok)
-                {
-                    if (binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
-                    {
-                        sleep(2);
-                    }
-                    else
-                    {
-                        goto finally;
-                    }
+                    break;
                 }
             }
         }
     }
 
- finally:
-    
     return NULL;
 }
