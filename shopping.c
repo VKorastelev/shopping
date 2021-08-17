@@ -3,7 +3,8 @@
 #include <pthread.h>
 #include <errno.h>
 #include <unistd.h>
-#include "randproducts.h"
+#include <stdbool.h>
+#include "randinrange.h"
 
 #define NUM_SHOPS 5
 #define MIN_NUM_PRODUCTS 900
@@ -68,7 +69,7 @@ int main(void)
     for (i = 0; i < NUM_SHOPS; i++)
     {
         shops[i].shop_num = i + 1;
-        shops[i].num_of_product = rand_products(MIN_NUM_PRODUCTS, MAX_NUM_PRODUCTS);
+        shops[i].num_of_product = rand_in_range(MIN_NUM_PRODUCTS, MAX_NUM_PRODUCTS);
         //shops[i].mutex_shop_state = PTHREAD_MUTEX_INITIALIZER;
 
         ret = pthread_mutex_init(&shops[i].mutex_shop_state, NULL);
@@ -201,33 +202,47 @@ static void *thf_buyer(void *args)
 {
     int i;
     struct buyer_info *binfo = args;
+    bool purch_ok = false;
 
-    while(binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
+//    while(binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
+    while(1)
     {
         for (i = 0; i < NUM_SHOPS; i++)
         {
             if (0 == pthread_mutex_trylock(&shops[i].mutex_shop_state))
             {
-                binfo->num_purchased_product += shops[i].num_of_product;
-                
-                printf("Buyer N %d purchased %d items in the shop N %d, num of purchased"
-                        " product = %d\n",
-                        binfo->buyer_num, 
-                        shops[i].num_of_product,
-                        shops[i].shop_num,
-                        binfo->num_purchased_product);
-
-                shops[i].num_of_product = 0;
-                
-                pthread_mutex_unlock(&shops[i].mutex_shop_state);
-                
-                if (binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
+                if (shops[i].num_of_product > 0)
                 {
-                    sleep(2);
+                    binfo->num_purchased_product += shops[i].num_of_product;
+                    purch_ok = true;
+
+                    printf("Buyer N %d purchased %d items in the shop N %d, num of"
+                            " purchased product = %d\n",
+                            binfo->buyer_num, 
+                            shops[i].num_of_product,
+                            shops[i].shop_num,
+                            binfo->num_purchased_product);
+                    shops[i].num_of_product = 0;
+
+                    //pthread_mutex_unlock(&shops[i].mutex_shop_state);
                 }
                 else
                 {
-                    goto finally;
+                    purch_ok = false;
+                }
+
+                pthread_mutex_unlock(&shops[i].mutex_shop_state);
+
+                if (true == purch_ok)
+                {
+                    if (binfo->num_purchased_product < MAX_NUM_PURCHASED_PRODUCT)
+                    {
+                        sleep(2);
+                    }
+                    else
+                    {
+                        goto finally;
+                    }
                 }
             }
         }
